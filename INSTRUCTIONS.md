@@ -12,6 +12,8 @@
 #### Шаг 1 — Установить com0com и создать пару портов
 
 1. Скачать **com0com** с https://sourceforge.net/projects/com0com/
+https://sourceforge.net/projects/com0com/files/com0com/2.2.2.0/
+Файл: com0com-2.2.2.0-x64-fre-signed.zip
 2. Установить (требуются права администратора)
 3. Открыть **Setup Command Prompt** (из меню Пуск → com0com)
 4. Выполнить команду:
