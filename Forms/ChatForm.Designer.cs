@@ -259,8 +259,8 @@
             this.cmbPace.ForeColor     = txt;
             this.cmbPace.Location      = new System.Drawing.Point(124, 100);
             this.cmbPace.Size          = new System.Drawing.Size(180, 22);
-            this.cmbPace.Items.AddRange(new object[] { "🐢  Медленно (500 мс)", "🚶  Нормально (100 мс)", "🚀  Быстро (10 мс)" });
-            this.cmbPace.SelectedIndex = 1;
+            this.cmbPace.Items.AddRange(new object[] { "🐌  Очень медленно (2 с)", "🐢  Медленно (500 мс)", "🚶  Нормально (100 мс)", "🚀  Быстро (10 мс)" });
+            this.cmbPace.SelectedIndex = 2;
 
             this.btnSetPace.BackColor = acc;
             this.btnSetPace.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
@@ -368,8 +368,8 @@
             this.cmbPaceRecv.ForeColor     = txt;
             this.cmbPaceRecv.Location      = new System.Drawing.Point(124, 58);
             this.cmbPaceRecv.Size          = new System.Drawing.Size(180, 22);
-            this.cmbPaceRecv.Items.AddRange(new object[] { "🐢  Медленно (500 мс)", "🚶  Нормально (100 мс)", "🚀  Быстро (10 мс)" });
-            this.cmbPaceRecv.SelectedIndex = 1;
+            this.cmbPaceRecv.Items.AddRange(new object[] { "🐌  Очень медленно (2 с)", "🐢  Медленно (500 мс)", "🚶  Нормально (100 мс)", "🚀  Быстро (10 мс)" });
+            this.cmbPaceRecv.SelectedIndex = 2;
 
             this.btnSetPaceRecv.BackColor = acc;
             this.btnSetPaceRecv.FlatStyle = System.Windows.Forms.FlatStyle.Flat;

@@ -65,7 +65,7 @@ namespace KR
         }
 
         // ── Pace levels (ms delay between chunks) ────────────────────────────
-        public enum PaceLevel { Slow = 500, Normal = 100, Fast = 10 }
+        public enum PaceLevel { VerySlow = 2000, Slow = 500, Normal = 100, Fast = 10 }
 
         // ── Test error injection mode ─────────────────────────────────────────
         /// <summary>
@@ -201,15 +201,21 @@ namespace KR
                         int dataLen  = lenBuf[0] | (lenBuf[1] << 8);
                         var encoded  = ReadExact(port, dataLen);
 
-                        var decoded = _coder.DecodeBytes(encoded);
+                        // Decode with SECDED: corrects 1-bit, detects 2-bit
+                        bool hadCorrection = false;
+                        var decoded = DecodeWithLog(encoded, chunkIdx, out hadCorrection);
                         if (decoded == null)
                         {
-                            Log($"[{DateTime.Now:HH:mm:ss}] CHUNK #{chunkIdx} decode error → RET", Color.Crimson);
+                            Log($"[{DateTime.Now:HH:mm:ss}] CHUNK #{chunkIdx} — 2-битовая ошибка, исправление невозможно → RET_CHUNK", Color.Crimson);
                             SendControlFrame(FrameType.RET_CHUNK, port);
                             break;
                         }
 
-                        Log($"[{DateTime.Now:HH:mm:ss}] CHUNK #{chunkIdx} OK ({decoded.Length} bytes)", Color.DodgerBlue);
+                        if (hadCorrection)
+                            Log($"[{DateTime.Now:HH:mm:ss}] CHUNK #{chunkIdx} — 1-битовая ошибка исправлена кодом Хэмминга ✓", Color.FromArgb(255, 200, 80));
+                        else
+                            Log($"[{DateTime.Now:HH:mm:ss}] CHUNK #{chunkIdx} OK ({decoded.Length} bytes)", Color.DodgerBlue);
+
                         SendControlFrame(FrameType.ACK_CHUNK, port);
                         OnChunkReceived?.Invoke(chunkIdx, decoded);
                     }
@@ -246,6 +252,8 @@ namespace KR
                     Log($"[{DateTime.Now:HH:mm:ss}] Pace → SLOW ({(int)PaceLevel.Slow} ms)", Color.DarkOrange);
                     OnPaceChanged?.Invoke(PaceLevel.Slow);
                     break;
+
+                // VerySlow is handled client-side only (no separate frame type — reuse PACE_SLOW)
 
                 case FrameType.PACE_NORMAL:
                     CurrentPace = PaceLevel.Normal;
@@ -366,11 +374,13 @@ namespace KR
         /// <summary>Send a pace-control frame to the remote side.</summary>
         public void SendPace(PaceLevel pace, SerialPort port)
         {
+            // VerySlow is a local-only extension — map it to PACE_SLOW on the wire
             FrameType ft = pace switch
             {
-                PaceLevel.Slow   => FrameType.PACE_SLOW,
-                PaceLevel.Fast   => FrameType.PACE_FAST,
-                _                => FrameType.PACE_NORMAL,
+                PaceLevel.VerySlow => FrameType.PACE_SLOW,
+                PaceLevel.Slow     => FrameType.PACE_SLOW,
+                PaceLevel.Fast     => FrameType.PACE_FAST,
+                _                  => FrameType.PACE_NORMAL,
             };
             SendControlFrame(ft, port);
             CurrentPace = pace;
@@ -379,6 +389,85 @@ namespace KR
         // ─────────────────────────────────────────────────────────────────────
         // Utility
         // ─────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Decode a Hamming-encoded chunk, tracking whether any 1-bit corrections occurred.
+        /// Returns null if an uncorrectable (2-bit) error is detected.
+        /// </summary>
+        private byte[] DecodeWithLog(byte[] encoded, int chunkIdx, out bool hadCorrection)
+        {
+            hadCorrection = false;
+            if (encoded == null || encoded.Length % 2 != 0) return null;
+
+            var result = new List<byte>(encoded.Length / 2);
+            for (int i = 0; i < encoded.Length; i += 2)
+            {
+                // Decode low nibble
+                var lowNibble  = DecodeNibbleTracked(encoded[i],   out bool c1, out bool u1);
+                var highNibble = DecodeNibbleTracked(encoded[i+1], out bool c2, out bool u2);
+
+                if (u1 || u2)
+                    return null; // 2-bit uncorrectable error
+
+                if (c1 || c2) hadCorrection = true;
+
+                int b = 0;
+                for (int j = 0; j < 4; j++) if (lowNibble[j])  b |= (1 << j);
+                for (int j = 0; j < 4; j++) if (highNibble[j]) b |= (1 << (j+4));
+                result.Add((byte)b);
+            }
+            return result.ToArray();
+        }
+
+        /// <summary>
+        /// Decode one 8-bit SECDED codeword with correction/detection tracking.
+        /// </summary>
+        private static System.Collections.BitArray DecodeNibbleTracked(byte raw,
+            out bool corrected, out bool uncorrectable)
+        {
+            corrected     = false;
+            uncorrectable = false;
+
+            bool d1 = (raw & 0x01) != 0;
+            bool d2 = (raw & 0x02) != 0;
+            bool d3 = (raw & 0x04) != 0;
+            bool p1 = (raw & 0x08) != 0;
+            bool d4 = (raw & 0x10) != 0;
+            bool p2 = (raw & 0x20) != 0;
+            bool p3 = (raw & 0x40) != 0;
+
+            bool s1 = p1 ^ d1 ^ d2 ^ d3;
+            bool s2 = p2 ^ d1 ^ d2 ^ d4;
+            bool s3 = p3 ^ d1 ^ d3 ^ d4;
+            int syndrome = (s3 ? 4 : 0) | (s2 ? 2 : 0) | (s1 ? 1 : 0);
+
+            // Count all 8 bits for overall parity
+            int bitCount = 0;
+            for (int tmp = raw; tmp != 0; tmp >>= 1) bitCount += tmp & 1;
+            bool overallOk = (bitCount % 2) == 0;
+
+            if (syndrome != 0 && !overallOk)
+            {
+                // 1-bit error — correct it
+                int bitPos = syndrome - 1;
+                raw ^= (byte)(1 << bitPos);
+                corrected = true;
+                d1 = (raw & 0x01) != 0;
+                d2 = (raw & 0x02) != 0;
+                d3 = (raw & 0x04) != 0;
+                d4 = (raw & 0x10) != 0;
+            }
+            else if (syndrome != 0 && overallOk)
+            {
+                // 2-bit error — uncorrectable
+                uncorrectable = true;
+                return null;
+            }
+
+            var result = new System.Collections.BitArray(4);
+            result[0] = d1; result[1] = d2; result[2] = d3; result[3] = d4;
+            return result;
+        }
 
         private static byte[] ReadExact(SerialPort port, int count)
         {
