@@ -1,0 +1,6 @@
+System.IO.FileNotFoundException: C:\Users\Tanya\Учеба\KR-st\фон_лог.jpg
+   at System.Drawing.Image.FromFile(String filename, Boolean useEmbeddedColorManagement)
+   at KR.Forms.SettingsForm.InitializeComponent() in C:\Users\123\Desktop\KR-st!!\KR-st\Forms\SettingsForm.Designer.cs:line 162
+   at KR.Forms.SettingsForm..ctor() in C:\Users\123\Desktop\KR-st!!\KR-st\Forms\SettingsForm.cs:line 23
+   at KR.Forms.ChatForm..ctor() in C:\Users\123\Desktop\KR-st!!\KR-st\Forms\ChatForm.cs:line 35
+   at KR.Program.Main() in C:\Users\123\Desktop\KR-st!!\KR-st\Program.cs:line 22
