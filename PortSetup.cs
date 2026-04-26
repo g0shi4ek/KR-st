@@ -21,34 +21,25 @@ namespace KR
         public const string ReceiverPortName = "COM2";
 
         /// <summary>
-        /// Normalises a port name so that it works with com0com virtual ports.
-        /// For COM ports, .NET's SerialPort accepts "COM1" etc., but some drivers
-        /// (including com0com) require the full device path "\\.\COM1".
-        /// We always pass the full path to avoid "Could not find file" errors.
-        /// </summary>
-        private static string NormalisePortName(string portName)
-        {
-            // Already in device-path form
-            if (portName.StartsWith(@"\\.\", StringComparison.OrdinalIgnoreCase))
-                return portName;
-
-            return @"\\.\" + portName;
-        }
-
-        /// <summary>
         /// Opens and returns a configured SerialPort for the given role.
-        /// Throws an exception if the port cannot be opened.
+        /// Uses plain port name (e.g. "COM2") which works for both real and
+        /// com0com virtual ports under .NET's SerialPort implementation.
         /// </summary>
         public static SerialPort OpenPort(string portName)
         {
-            string devicePath = NormalisePortName(portName);
-
-            var port = new SerialPort(devicePath, DefaultBaudRate, DefaultParity, DefaultDataBits, DefaultStopBits)
+            var port = new SerialPort(portName, DefaultBaudRate, DefaultParity, DefaultDataBits, DefaultStopBits)
             {
-                RtsEnable    = true,
-                DtrEnable    = true,
-                ReadTimeout  = 5000,
-                WriteTimeout = 5000
+                // Use infinite timeout so reads don't time out while waiting for data
+                ReadTimeout  = SerialPort.InfiniteTimeout,
+                WriteTimeout = 5000,
+                // RTS/DTR: enable for real null-modem; com0com ignores them
+                RtsEnable = true,
+                DtrEnable = true,
+                // Discard null bytes — prevents issues with com0com padding
+                DiscardNull = false,
+                // Receive buffer
+                ReadBufferSize  = 4096,
+                WriteBufferSize = 4096
             };
             port.Open();
             return port;
