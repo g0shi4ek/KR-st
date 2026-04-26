@@ -73,8 +73,8 @@ namespace KR
         /// None    – normal operation, no errors injected.
         /// OneBit  – one bit is flipped in the Hamming-encoded payload of every
         ///           CHUNK frame; the [7,4] decoder corrects it automatically.
-        /// TwoBit  – two bits are flipped; the decoder detects but cannot correct
-        ///           the error and sends RET_CHUNK; after MAX_RETRIES the transfer fails.
+        /// TwoBit  – two bits are flipped in the SAME codeword; the SECDED decoder
+        ///           detects but cannot correct the error → sends RET_CHUNK.
         /// </summary>
         public enum ErrorMode { None, OneBit, TwoBit }
 
@@ -202,11 +202,12 @@ namespace KR
                         var encoded  = ReadExact(port, dataLen);
 
                         // Decode with SECDED: corrects 1-bit, detects 2-bit
-                        bool hadCorrection = false;
-                        var decoded = DecodeWithLog(encoded, chunkIdx, out hadCorrection);
-                        if (decoded == null)
+                        var decoded = _coder.DecodeBytes(encoded,
+                            out bool hadCorrection, out bool hadUncorrectable);
+
+                        if (hadUncorrectable || decoded == null)
                         {
-                            Log($"[{DateTime.Now:HH:mm:ss}] CHUNK #{chunkIdx} — 2-битовая ошибка, исправление невозможно → RET_CHUNK", Color.Crimson);
+                            Log($"[{DateTime.Now:HH:mm:ss}] CHUNK #{chunkIdx} — 2-битовая ошибка обнаружена, исправление невозможно → RET_CHUNK", Color.Crimson);
                             SendControlFrame(FrameType.RET_CHUNK, port);
                             break;
                         }
@@ -324,14 +325,17 @@ namespace KR
                 byte[] toSend = (byte[])encoded.Clone();
                 if (TestErrorMode != ErrorMode.None && toSend.Length > 0)
                 {
-                    // Flip bit 0 of byte 0
+                    // Flip bit 0 of byte 0 (d1 of the first nibble codeword)
                     toSend[0] ^= 0x01;
-                    string errDesc = "1-bit error injected";
-                    if (TestErrorMode == ErrorMode.TwoBit && toSend.Length > 1)
+                    string errDesc = "1-bit error injected (bit 0 of codeword 0)";
+
+                    if (TestErrorMode == ErrorMode.TwoBit)
                     {
-                        // Flip bit 1 of byte 1 (different byte → uncorrectable)
-                        toSend[1] ^= 0x02;
-                        errDesc = "2-bit error injected";
+                        // Flip a SECOND bit in the SAME codeword (byte 0) so that
+                        // the SECDED decoder sees syndrome≠0 but overall parity OK
+                        // → detects uncorrectable 2-bit error in that codeword.
+                        toSend[0] ^= 0x02;
+                        errDesc = "2-bit error injected (bits 0+1 of codeword 0)";
                     }
                     Log($"[{DateTime.Now:HH:mm:ss}] ⚡ TEST: {errDesc} in CHUNK #{chunkIndex}", Color.Orange);
                 }
@@ -390,85 +394,6 @@ namespace KR
         // Utility
         // ─────────────────────────────────────────────────────────────────────
 
-        /// <summary>
-        /// Decode a Hamming-encoded chunk, tracking whether any 1-bit corrections occurred.
-        /// Returns null if an uncorrectable (2-bit) error is detected.
-        /// </summary>
-        private byte[] DecodeWithLog(byte[] encoded, int chunkIdx, out bool hadCorrection)
-        {
-            hadCorrection = false;
-            if (encoded == null || encoded.Length % 2 != 0) return null;
-
-            var result = new List<byte>(encoded.Length / 2);
-            for (int i = 0; i < encoded.Length; i += 2)
-            {
-                // Decode low nibble
-                var lowNibble  = DecodeNibbleTracked(encoded[i],   out bool c1, out bool u1);
-                var highNibble = DecodeNibbleTracked(encoded[i+1], out bool c2, out bool u2);
-
-                if (u1 || u2)
-                    return null; // 2-bit uncorrectable error
-
-                if (c1 || c2) hadCorrection = true;
-
-                int b = 0;
-                for (int j = 0; j < 4; j++) if (lowNibble[j])  b |= (1 << j);
-                for (int j = 0; j < 4; j++) if (highNibble[j]) b |= (1 << (j+4));
-                result.Add((byte)b);
-            }
-            return result.ToArray();
-        }
-
-        /// <summary>
-        /// Decode one 8-bit SECDED codeword with correction/detection tracking.
-        /// </summary>
-        private static System.Collections.BitArray DecodeNibbleTracked(byte raw,
-            out bool corrected, out bool uncorrectable)
-        {
-            corrected     = false;
-            uncorrectable = false;
-
-            bool d1 = (raw & 0x01) != 0;
-            bool d2 = (raw & 0x02) != 0;
-            bool d3 = (raw & 0x04) != 0;
-            bool p1 = (raw & 0x08) != 0;
-            bool d4 = (raw & 0x10) != 0;
-            bool p2 = (raw & 0x20) != 0;
-            bool p3 = (raw & 0x40) != 0;
-
-            bool s1 = p1 ^ d1 ^ d2 ^ d3;
-            bool s2 = p2 ^ d1 ^ d2 ^ d4;
-            bool s3 = p3 ^ d1 ^ d3 ^ d4;
-            int syndrome = (s3 ? 4 : 0) | (s2 ? 2 : 0) | (s1 ? 1 : 0);
-
-            // Count all 8 bits for overall parity
-            int bitCount = 0;
-            for (int tmp = raw; tmp != 0; tmp >>= 1) bitCount += tmp & 1;
-            bool overallOk = (bitCount % 2) == 0;
-
-            if (syndrome != 0 && !overallOk)
-            {
-                // 1-bit error — correct it
-                int bitPos = syndrome - 1;
-                raw ^= (byte)(1 << bitPos);
-                corrected = true;
-                d1 = (raw & 0x01) != 0;
-                d2 = (raw & 0x02) != 0;
-                d3 = (raw & 0x04) != 0;
-                d4 = (raw & 0x10) != 0;
-            }
-            else if (syndrome != 0 && overallOk)
-            {
-                // 2-bit error — uncorrectable
-                uncorrectable = true;
-                return null;
-            }
-
-            var result = new System.Collections.BitArray(4);
-            result[0] = d1; result[1] = d2; result[2] = d3; result[3] = d4;
-            return result;
-        }
-
         private static byte[] ReadExact(SerialPort port, int count)
         {
             var buf  = new byte[count];
@@ -490,19 +415,30 @@ namespace KR
         private void Log(string text, Color color)
         {
             if (LogBox == null) return;
-            if (LogBox.InvokeRequired)
-                LogBox.Invoke(new Action(() => AppendLog(text, color)));
-            else
-                AppendLog(text, color);
+            try
+            {
+                if (LogBox.IsHandleCreated && !LogBox.IsDisposed)
+                {
+                    if (LogBox.InvokeRequired)
+                        LogBox.BeginInvoke(new Action(() => AppendLog(text, color)));
+                    else
+                        AppendLog(text, color);
+                }
+            }
+            catch { /* ignore logging errors */ }
         }
 
         private void AppendLog(string text, Color color)
         {
-            LogBox.SelectionStart  = LogBox.TextLength;
-            LogBox.SelectionLength = 0;
-            LogBox.SelectionColor  = color;
-            LogBox.AppendText(text + "\n");
-            LogBox.ScrollToCaret();
+            try
+            {
+                LogBox.SelectionStart  = LogBox.TextLength;
+                LogBox.SelectionLength = 0;
+                LogBox.SelectionColor  = color;
+                LogBox.AppendText(text + "\n");
+                LogBox.ScrollToCaret();
+            }
+            catch { /* ignore */ }
         }
     }
 }
