@@ -65,7 +65,7 @@ namespace KR
         }
 
         // ── Pace levels (ms delay between chunks) ────────────────────────────
-        public enum PaceLevel { Slow = 500, Normal = 100, Fast = 10 }
+        public enum PaceLevel { Slow = 200, Normal = 100, Fast = 10 }
 
         // ── Test error injection mode ─────────────────────────────────────────
         /// <summary>
@@ -340,11 +340,12 @@ namespace KR
                     Log($"[{DateTime.Now:HH:mm:ss}] ⚡ TEST: {errDesc} in CHUNK #{chunkIndex}", Color.Orange);
                 }
 
-                // Prepare event
+                // Prepare event — Reset BEFORE setting _waitingForChunkAck to avoid
+                // a race where ACK arrives between the flag set and the Reset() call.
+                _chunkAckEvent.Reset();
                 _chunkAckReceived   = false;
                 _chunkRetReceived   = false;
                 _waitingForChunkAck = true;
-                _chunkAckEvent.Reset();
 
                 EnsureOpen(port);
                 var payload = new List<byte> { START, (byte)FrameType.CHUNK };
@@ -355,8 +356,10 @@ namespace KR
                 port.Write(payload.ToArray(), 0, payload.Count);
                 Log($"[{DateTime.Now:HH:mm:ss}] → CHUNK #{chunkIndex} ({rawData.Length} bytes, attempt {attempt + 1})", Color.SlateGray);
 
-                // Wait up to 3 seconds for ACK or RET (signalled by FrameAction)
-                bool signalled = _chunkAckEvent.Wait(3000);
+                // Wait up to 10 seconds for ACK or RET (signalled by FrameAction).
+                // At 9600 bps, 262 encoded bytes take ~273 ms to transmit;
+                // 10 s gives ample margin even on slow virtual COM pairs.
+                bool signalled = _chunkAckEvent.Wait(10000);
                 _waitingForChunkAck = false;
 
                 if (signalled && _chunkAckReceived)

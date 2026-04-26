@@ -254,7 +254,7 @@ namespace KR.Forms
             {
                 string label = pace switch
                 {
-                    Frames.PaceLevel.Slow => "Медленно (500 мс/блок)",
+                    Frames.PaceLevel.Slow => "Медленно (200 мс/блок)",
                     Frames.PaceLevel.Fast => "Быстро (10 мс/блок)",
                     _                     => "Нормально (100 мс/блок)",
                 };
