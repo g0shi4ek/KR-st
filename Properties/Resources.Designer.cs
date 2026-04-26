@@ -60,14 +60,5 @@ namespace KR.Properties {
             }
         }
         
-        /// <summary>
-        ///   Поиск локализованного ресурса типа System.Drawing.Bitmap.
-        /// </summary>
-        internal static System.Drawing.Bitmap _1593746655_9_p_foni_s_temimi_gradientami_11 {
-            get {
-                object obj = ResourceManager.GetObject("1593746655_9-p-foni-s-temimi-gradientami-11", resourceCulture);
-                return ((System.Drawing.Bitmap)(obj));
-            }
-        }
     }
 }
