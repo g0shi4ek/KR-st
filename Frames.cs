@@ -67,6 +67,20 @@ namespace KR
         // ── Pace levels (ms delay between chunks) ────────────────────────────
         public enum PaceLevel { Slow = 500, Normal = 100, Fast = 10 }
 
+        // ── Test error injection mode ─────────────────────────────────────────
+        /// <summary>
+        /// Controls artificial bit-error injection for demonstration purposes.
+        /// None    – normal operation, no errors injected.
+        /// OneBit  – one bit is flipped in the Hamming-encoded payload of every
+        ///           CHUNK frame; the [7,4] decoder corrects it automatically.
+        /// TwoBit  – two bits are flipped; the decoder detects but cannot correct
+        ///           the error and sends RET_CHUNK; after MAX_RETRIES the transfer fails.
+        /// </summary>
+        public enum ErrorMode { None, OneBit, TwoBit }
+
+        /// <summary>Current test error injection mode (set from UI).</summary>
+        public ErrorMode TestErrorMode { get; set; } = ErrorMode.None;
+
         // ── Events ────────────────────────────────────────────────────────────
         public event Action<string, int>  OnFileInfoReceived;   // (fileName, totalChunks)
         public event Action<int, byte[]>  OnChunkReceived;      // (chunkIndex, rawData)
@@ -296,6 +310,24 @@ namespace KR
 
             for (int attempt = 0; attempt < MAX_RETRIES; attempt++)
             {
+                // ── Test error injection ──────────────────────────────────────
+                // Make a working copy so the original encoded array stays intact
+                // for retry attempts (we re-inject on every attempt for clarity).
+                byte[] toSend = (byte[])encoded.Clone();
+                if (TestErrorMode != ErrorMode.None && toSend.Length > 0)
+                {
+                    // Flip bit 0 of byte 0
+                    toSend[0] ^= 0x01;
+                    string errDesc = "1-bit error injected";
+                    if (TestErrorMode == ErrorMode.TwoBit && toSend.Length > 1)
+                    {
+                        // Flip bit 1 of byte 1 (different byte → uncorrectable)
+                        toSend[1] ^= 0x02;
+                        errDesc = "2-bit error injected";
+                    }
+                    Log($"[{DateTime.Now:HH:mm:ss}] ⚡ TEST: {errDesc} in CHUNK #{chunkIndex}", Color.Orange);
+                }
+
                 // Prepare event
                 _chunkAckReceived   = false;
                 _chunkRetReceived   = false;
@@ -305,9 +337,9 @@ namespace KR
                 EnsureOpen(port);
                 var payload = new List<byte> { START, (byte)FrameType.CHUNK };
                 payload.AddRange(BitConverter.GetBytes(chunkIndex));
-                payload.Add((byte)(encoded.Length & 0xFF));
-                payload.Add((byte)((encoded.Length >> 8) & 0xFF));
-                payload.AddRange(encoded);
+                payload.Add((byte)(toSend.Length & 0xFF));
+                payload.Add((byte)((toSend.Length >> 8) & 0xFF));
+                payload.AddRange(toSend);
                 port.Write(payload.ToArray(), 0, payload.Count);
                 Log($"[{DateTime.Now:HH:mm:ss}] → CHUNK #{chunkIndex} ({rawData.Length} bytes, attempt {attempt + 1})", Color.SlateGray);
 

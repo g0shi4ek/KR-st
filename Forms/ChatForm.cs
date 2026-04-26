@@ -173,13 +173,14 @@ namespace KR.Forms
             _connected = true;
             SafeInvoke(() =>
             {
-                lblStatus.Text      = "Подключено";
-                lblStatus.ForeColor = Color.LightGreen;
+                lblStatus.Text      = "● Подключено";
+                lblStatus.ForeColor = Color.FromArgb(76, 201, 160);
+                lblStatus.BackColor = Color.FromArgb(20, 76, 201, 160);
                 if (_isSender)
                 {
                     btnSendFile.Enabled = !string.IsNullOrEmpty(_fileToSend);
                 }
-                AppendLog($"[{DateTime.Now:HH:mm:ss}] Соединение установлено.", Color.LightGreen);
+                AppendLog($"[{DateTime.Now:HH:mm:ss}] Соединение установлено.", Color.FromArgb(76, 201, 160));
             });
         }
 
@@ -382,6 +383,23 @@ namespace KR.Forms
             }
         }
 
+        private void CmbErrorMode_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            _frames.TestErrorMode = cmbErrorMode.SelectedIndex switch
+            {
+                1 => Frames.ErrorMode.OneBit,
+                2 => Frames.ErrorMode.TwoBit,
+                _ => Frames.ErrorMode.None,
+            };
+            string desc = cmbErrorMode.SelectedIndex switch
+            {
+                1 => "⚡ Режим: 1-битовая ошибка (Хэмминг исправит)",
+                2 => "💥 Режим: 2-битовая ошибка (передача прервётся)",
+                _ => "✅ Режим: без ошибок",
+            };
+            AppendLog($"[{DateTime.Now:HH:mm:ss}] {desc}", Color.FromArgb(255, 200, 80));
+        }
+
         private void BtnSetPace_Click(object sender, EventArgs e)
         {
             if (!_connected || _port == null || !_port.IsOpen)
@@ -458,8 +476,9 @@ namespace KR.Forms
         private void SetDisconnectedState()
         {
             _connected            = false;
-            lblStatus.Text        = "Не подключено";
-            lblStatus.ForeColor   = Color.OrangeRed;
+            lblStatus.Text        = "● Не подключено";
+            lblStatus.ForeColor   = Color.FromArgb(224, 82, 82);
+            lblStatus.BackColor   = Color.FromArgb(40, 224, 82, 82);
             btnConnect.Enabled    = true;
             btnDisconnect.Enabled = false;
             btnSendFile.Enabled   = false;
