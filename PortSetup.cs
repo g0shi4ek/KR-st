@@ -11,14 +11,29 @@ namespace KR
     class PortSetup
     {
         // Default COM-port parameters (fixed per task specification)
-        public const int    DefaultBaudRate  = 9600;
-        public const int    DefaultDataBits  = 8;
-        public const Parity DefaultParity    = Parity.None;
-        public const StopBits DefaultStopBits = StopBits.One;
+        public const int      DefaultBaudRate  = 9600;
+        public const int      DefaultDataBits  = 8;
+        public const Parity   DefaultParity    = Parity.None;
+        public const StopBits DefaultStopBits  = StopBits.One;
 
         // Port names
         public const string SenderPortName   = "COM1";
         public const string ReceiverPortName = "COM2";
+
+        /// <summary>
+        /// Normalises a port name so that it works with com0com virtual ports.
+        /// For COM ports, .NET's SerialPort accepts "COM1" etc., but some drivers
+        /// (including com0com) require the full device path "\\.\COM1".
+        /// We always pass the full path to avoid "Could not find file" errors.
+        /// </summary>
+        private static string NormalisePortName(string portName)
+        {
+            // Already in device-path form
+            if (portName.StartsWith(@"\\.\", StringComparison.OrdinalIgnoreCase))
+                return portName;
+
+            return @"\\.\" + portName;
+        }
 
         /// <summary>
         /// Opens and returns a configured SerialPort for the given role.
@@ -26,12 +41,14 @@ namespace KR
         /// </summary>
         public static SerialPort OpenPort(string portName)
         {
-            var port = new SerialPort(portName, DefaultBaudRate, DefaultParity, DefaultDataBits, DefaultStopBits)
+            string devicePath = NormalisePortName(portName);
+
+            var port = new SerialPort(devicePath, DefaultBaudRate, DefaultParity, DefaultDataBits, DefaultStopBits)
             {
                 RtsEnable    = true,
                 DtrEnable    = true,
-                ReadTimeout  = 2000,
-                WriteTimeout = 2000
+                ReadTimeout  = 5000,
+                WriteTimeout = 5000
             };
             port.Open();
             return port;
