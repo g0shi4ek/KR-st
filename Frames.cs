@@ -320,10 +320,11 @@ namespace KR
             for (int attempt = 0; attempt < MAX_RETRIES; attempt++)
             {
                 // ── Test error injection ──────────────────────────────────────
-                // Make a working copy so the original encoded array stays intact
-                // for retry attempts (we re-inject on every attempt for clarity).
+                // Errors are injected ONLY on the first attempt (attempt == 0).
+                // On retries the clean encoded data is sent so the transfer can
+                // recover — demonstrating the retransmission mechanism.
                 byte[] toSend = (byte[])encoded.Clone();
-                if (TestErrorMode != ErrorMode.None && toSend.Length > 0)
+                if (attempt == 0 && TestErrorMode != ErrorMode.None && toSend.Length > 0)
                 {
                     // Flip bit 0 of byte 0 (d1 of the first nibble codeword)
                     toSend[0] ^= 0x01;
@@ -333,7 +334,8 @@ namespace KR
                     {
                         // Flip a SECOND bit in the SAME codeword (byte 0) so that
                         // the SECDED decoder sees syndrome≠0 but overall parity OK
-                        // → detects uncorrectable 2-bit error in that codeword.
+                        // → detects uncorrectable 2-bit error → RET_CHUNK sent.
+                        // On the next attempt (attempt==1) clean data is sent → ACK.
                         toSend[0] ^= 0x02;
                         errDesc = "2-bit error injected (bits 0+1 of codeword 0)";
                     }
