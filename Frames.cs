@@ -65,7 +65,7 @@ namespace KR
         }
 
         // ── Pace levels (ms delay between chunks) ────────────────────────────
-        public enum PaceLevel { VerySlow = 2000, Slow = 500, Normal = 100, Fast = 10 }
+        public enum PaceLevel { Slow = 500, Normal = 100, Fast = 10 }
 
         // ── Test error injection mode ─────────────────────────────────────────
         /// <summary>
@@ -254,8 +254,6 @@ namespace KR
                     OnPaceChanged?.Invoke(PaceLevel.Slow);
                     break;
 
-                // VerySlow is handled client-side only (no separate frame type — reuse PACE_SLOW)
-
                 case FrameType.PACE_NORMAL:
                     CurrentPace = PaceLevel.Normal;
                     Log($"[{DateTime.Now:HH:mm:ss}] Pace → NORMAL ({(int)PaceLevel.Normal} ms)", Color.DarkOrange);
@@ -380,13 +378,11 @@ namespace KR
         /// <summary>Send a pace-control frame to the remote side.</summary>
         public void SendPace(PaceLevel pace, SerialPort port)
         {
-            // VerySlow is a local-only extension — map it to PACE_SLOW on the wire
             FrameType ft = pace switch
             {
-                PaceLevel.VerySlow => FrameType.PACE_SLOW,
-                PaceLevel.Slow     => FrameType.PACE_SLOW,
-                PaceLevel.Fast     => FrameType.PACE_FAST,
-                _                  => FrameType.PACE_NORMAL,
+                PaceLevel.Slow => FrameType.PACE_SLOW,
+                PaceLevel.Fast => FrameType.PACE_FAST,
+                _              => FrameType.PACE_NORMAL,
             };
             SendControlFrame(ft, port);
             CurrentPace = pace;

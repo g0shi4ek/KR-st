@@ -249,16 +249,14 @@ namespace KR.Forms
 
         private void HandlePaceChanged(Frames.PaceLevel pace)
         {
-            // VerySlow is local-only; receiver gets PACE_SLOW on the wire → keep VerySlow on sender
             _currentPaceMs = (int)pace;
             SafeInvoke(() =>
             {
                 string label = pace switch
                 {
-                    Frames.PaceLevel.VerySlow => "Очень медленно (2000 мс/блок)",
-                    Frames.PaceLevel.Slow     => "Медленно (500 мс/блок)",
-                    Frames.PaceLevel.Fast     => "Быстро (10 мс/блок)",
-                    _                         => "Нормально (100 мс/блок)",
+                    Frames.PaceLevel.Slow => "Медленно (500 мс/блок)",
+                    Frames.PaceLevel.Fast => "Быстро (10 мс/блок)",
+                    _                     => "Нормально (100 мс/блок)",
                 };
                 AppendLog($"[{DateTime.Now:HH:mm:ss}] Темп изменён: {label}", Color.DarkOrange);
             });
@@ -494,9 +492,8 @@ namespace KR.Forms
 
         private static Frames.PaceLevel IndexToPace(int index) => index switch
         {
-            0 => Frames.PaceLevel.VerySlow,
-            1 => Frames.PaceLevel.Slow,
-            3 => Frames.PaceLevel.Fast,
+            0 => Frames.PaceLevel.Slow,
+            2 => Frames.PaceLevel.Fast,
             _ => Frames.PaceLevel.Normal,
         };
 
